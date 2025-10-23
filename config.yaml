@@ -1,0 +1,11 @@
+model_path: "models/emotion_classifier.pth"
+input_dir: "data/raw"
+processed_dir: "data/processed"
+output_dir: "data/sorted"
+emotion_classes:
+  - neutral
+  - joy
+  - anger
+  - sadness
+  - surprise
+confidence_threshold: 0.6
