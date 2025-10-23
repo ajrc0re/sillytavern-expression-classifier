@@ -1,11 +1,38 @@
+classification_mode: "api"  # options: "api" (default) or "local"
+mistral_api_key: ""  # required when classification_mode is "api"
+mistral_model: "pixtral-12b-latest"
+mistral_endpoint: "https://api.mistral.ai/v1/chat/completions"
 model_path: "models/emotion_classifier.pth"
 input_dir: "data/raw"
 processed_dir: "data/processed"
 output_dir: "data/sorted"
 emotion_classes:
-  - neutral
-  - joy
-  - anger
-  - sadness
-  - surprise
+- Admiration
+- Amusement
+- Anger
+- Annoyance
+- Approval
+- Caring
+- Confusion
+- Curiosity
+- Desire
+- Disappointment
+- Disapproval
+- Disgust
+- Embarrassment
+- Excitement
+- Fear
+- Gratitude
+- Grief
+- Joy
+- Love
+- Nervousness
+- Neutral
+- Optimism
+- Pride
+- Realization
+- Relief
+- Remorse
+- Sadness
+- Surprise
 confidence_threshold: 0.6

@@ -1,207 +1,186 @@
-# sillytavern-expression-classifier
+# SillyTavern Expression Classifier
 
-Great — here are **some useful open-source repositories** that are similar (or partly relevant) to your workflow, and then I’ll **sketch out a full example project structure** (with file names + purposes + some example code) that you could build locally to handle your “batch classify anime-character images by emotion” workflow.
+SillyTavern Expression Classifier sorts batches of sprite or portrait images into facial-expression folders. Feed it a character sheet and it will:
 
----
+- optionally resize the images into a common shape,
+- send each frame to the configured classifier (default: Mistral's Pixtral-12B vision model),
+- copy the file into an expression-specific subdirectory, and
+- log predictions with confidence scores for auditing.
 
-### 🔍 Relevant Open-Source Repos
-
-1. Emotion‑Detection‑on‑Virtual‑Avatars (GitHub: y arinbnyamin) — Emotion detection on virtual avatars / cartoon style. ([GitHub][1])
-2. Cartoon‑Emotion‑Recognition (GitHub: riti1302) — Emotion recognition in cartoon frames/videos. ([GitHub][2])
-3. anime‑face‑detector (GitHub: hysts) — Face detection + landmarks for anime/manga style — useful for pre-processing cropping. ([GitHub][3])
-4. EmotiEffLib (GitHub: sb-ai-lab) — A lightweight library for emotion & facial expression recognition (for more human faces, but the codebase gives ideas) ([GitHub][4])
+You can run the workflow from the command line or through the bundled Streamlit UI, so artists and engineers share the same pipeline.
 
 ---
 
-### 🏗 Example Project Structure & Code Sketch
+## How It Works
 
-```
-anime_emotion_sorter/
-├── README.md
-├── requirements.txt
+1. **Mode selection** - `scripts/classify_batch.py` reads `classification_mode` from `config.yaml`. `api` (default) calls Mistral's Pixtral model; `local` loads a PyTorch checkpoint from disk.  
+2. **Image preparation** - if `data/processed/` exists it is preferred, otherwise files are read from `data/raw/`. Images are converted to RGB and resized to 224×224 for local inference; the API receives the raw bytes.  
+3. **Inference** -  
+   - *API mode*: the script base64-encodes the image and sends it, plus a label prompt, to the Mistral Chat Completions endpoint. The JSON response is parsed for `label` and `confidence`.  
+   - *Local mode*: the PyTorch model is loaded onto CPU, torchvision transforms are applied, and softmax probabilities are computed to obtain the top label.  
+4. **Thresholding** - if the confidence score falls below `confidence_threshold`, the image is filed under `uncertain` for manual review.  
+5. **Output** - files are copied into `<output>/<label>/` folders and a `classification_log.json` audit trail is written alongside the results (including raw API responses when applicable).  
+6. **UI option** - `ui/app.py` wraps the CLI so non-technical users can browse for folders and run the sorter from a browser.
+
+---
+
+## Project Layout
+
+```text
+.
+├── config.yaml               # Paths, classifier mode, credentials, labels, thresholds
 ├── data/
-│   ├── raw/                    ← drop your input images here (batch of similar character, different expressions)
-│   ├── processed/              ← optional: pre-processed (cropped/resized) images
-│   └── sorted/                 ← output: subfolders per emotion label
-│       ├── neutral/
-│       ├── joy/
-│       ├── anger/
-│       └── …                   ← (other emotion classes you define)
+│   ├── raw/                  # Drop unsorted sprites here
+│   ├── processed/            # Optional resized copy of raw assets
+│   └── sorted/               # Classification outputs (one folder per label + uncertain)
 ├── models/
-│   ├── emotion_classifier.pth  ← pretrained or fine-tuned model
-│   └── README_MODEL.md         ← notes about model, classes, how trained
+│   ├── emotion_classifier.pth  # Optional local PyTorch weights
+│   └── README_MODEL.md         # Notes about the model and training metadata
 ├── scripts/
-│   ├── preprocess.py           ← image loading, optional cropping/resizing
-│   ├── classify_batch.py       ← runs inference on batch of files, outputs labels + sorts files
-│   └── utils.py                ← helper functions (image load, save, etc)
+│   ├── preprocess.py         # Minimal 224×224 resize pipeline
+│   ├── classify_batch.py     # Main CLI entry point
+│   └── utils.py              # Helpers for I/O and directory management
 ├── ui/
-│   └── app.py                 ← optional: a simple Streamlit or Flask UI to drag/drop folder + run sort
-└── config.yaml                 ← configuration: classes, folders, model path, thresholds
-```
-
-#### Explanation of each part
-
-* `requirements.txt`: list of Python dependencies (e.g., `torch`, `torchvision`, `Pillow`, `streamlit`, `opencv-python`).
-* `data/raw/`: where you put your image set.
-* `data/processed/`: optional step if you want to crop to face or standardise size.
-* `data/sorted/`: after classification the script will move images into subfolders named by emotion label.
-* `models/`: store your model weights here, plus any documentation of how it was trained.
-* `scripts/preprocess.py`: code to load every image in `data/raw/`, optionally detect the face (using anime-face-detector) and crop/resise, save to processed folder.
-* `scripts/classify_batch.py`: main script to run inference: load the model, go through images, predict emotion class, move image into `data/sorted/<label>/`. Also produce a CSV/JSON log of results (filename, prediction, confidence).
-* `scripts/utils.py`: helper image functions.
-* `ui/app.py`: if you want a frontend: you could build a Streamlit app where you select a folder and click “Run sort” and it shows progress, maybe preview uncertain cases.
-* `config.yaml`: define e.g. `emotion_classes: ["neutral","joy","anger","sadness",…]`, model path, input/output folders, threshold for "low confidence" flagging, etc.
-
----
-
-#### Example code snippets
-
-**scripts/utils.py**
-
-```python
-import os
-from PIL import Image
-
-def load_image(path, size=(224,224)):
-    img = Image.open(path).convert("RGB")
-    img = img.resize(size)
-    return img
-
-def save_sorted(image_path, label, output_root):
-    from shutil import copy2
-    os.makedirs(os.path.join(output_root, label), exist_ok=True)
-    copy2(image_path, os.path.join(output_root, label, os.path.basename(image_path)))
-```
-
-**scripts/preprocess.py**
-
-```python
-import os
-from utils import load_image
-# (optional) import anime-face-detector to crop face region
-
-INPUT_DIR = "../data/raw"
-OUTPUT_DIR = "../data/processed"
-
-def preprocess_all():
-    for fname in os.listdir(INPUT_DIR):
-        if fname.lower().endswith((".png",".jpg",".webp")):
-            path = os.path.join(INPUT_DIR, fname)
-            img = load_image(path, size=(224,224))
-            img.save(os.path.join(OUTPUT_DIR, fname))
-
-if __name__ == "__main__":
-    preprocess_all()
-    print("Preprocessing done.")
-```
-
-**scripts/classify_batch.py**
-
-```python
-import os
-import yaml
-import torch
-from torchvision import transforms
-from PIL import Image
-from utils import load_image, save_sorted
-
-# load config
-with open("../config.yaml", "r") as f:
-    cfg = yaml.safe_load(f)
-
-MODEL_PATH = cfg["model_path"]
-INPUT_DIR = cfg["input_dir"]
-OUTPUT_DIR = cfg["output_dir"]
-CLASSES = cfg["emotion_classes"]
-THRESHOLD = cfg.get("confidence_threshold", 0.5)
-
-# load model
-model = torch.load(MODEL_PATH)
-model.eval()
-
-transform = transforms.Compose([
-    transforms.Resize((224,224)),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485,0.456,0.406],
-                         std=[0.229,0.224,0.225])
-])
-
-log = []
-for fname in os.listdir(INPUT_DIR):
-    if fname.lower().endswith((".png",".jpg",".webp")):
-        fullpath = os.path.join(INPUT_DIR, fname)
-        img = Image.open(fullpath).convert("RGB")
-        x = transform(img).unsqueeze(0)  # batch size 1
-        with torch.no_grad():
-            logits = model(x)
-            probs = torch.softmax(logits, dim=1)[0]
-            conf, idx = torch.max(probs, dim=0)
-            label = CLASSES[idx]
-        log.append({"file": fname, "label": label, "confidence": float(conf)})
-        # if low confidence, maybe move to “uncertain” folder
-        if conf < THRESHOLD:
-            target_label = "uncertain"
-        else:
-            target_label = label
-        save_sorted(fullpath, target_label, OUTPUT_DIR)
-
-# write log
-import json
-with open(os.path.join(OUTPUT_DIR, "classification_log.json"), "w") as f:
-    json.dump(log, f, indent=2)
-
-print("Classification done. Results in:", OUTPUT_DIR)
-```
-
-**ui/app.py** *(Streamlit example)*
-
-```python
-import streamlit as st
-import subprocess
-
-st.title("Anime Emotion Sorter")
-
-folder = st.text_input("Input folder (raw images)", value="../data/raw")
-out = st.text_input("Output folder (sorted)", value="../data/sorted")
-
-if st.button("Run Classification"):
-    st.write("Starting …")
-    # you could call the classify script
-    subprocess.run(["python", "../scripts/classify_batch.py",
-                    "--input_dir", folder,
-                    "--output_dir", out])
-    st.write("Done! Check output folder.")
-
-st.write("⚠️ Note: For large batches this may take some time.")
-```
-
-**config.yaml**
-
-```yaml
-model_path: "models/emotion_classifier.pth"
-input_dir: "data/raw"
-output_dir: "data/sorted"
-emotion_classes:
-  - neutral
-  - joy
-  - anger
-  - sadness
-  - surprise
-confidence_threshold: 0.6
+│   └── app.py                # Streamlit front-end
+├── setup.sh                  # Bash bootstrapper for the Python environment
+├── setup_config.sh           # Optional overrides for setup.sh (e.g., PyTorch index)
+└── requirements.txt          # Python dependencies
 ```
 
 ---
 
-### ✅ Next Steps
+## Requirements
 
-* Pick a base model (pretrained ResNet50 or EfficientNet) and fine-tune on your images of the character (with labels for emotions) so the model learns *your style*.
-* Use the project structure above to build the pipeline.
-* Run on your GPU (3090) for inference; for training too if you choose.
-* Optionally build the UI if you want a visual tool, or just script for batch mode.
+- Python 3.10 or newer
+- pip plus `venv`/virtualenv
+- A Mistral API key (for the default API mode)
+- PyTorch & torchvision (already listed in `requirements.txt`) if you plan to run the optional local mode
 
-If you like, I can **search for an existing *anime-emotion-recognition dataset** (with labelled expressions for anime characters) that you might use for initial training (so you don’t have to label everything from scratch). Do you want me to dig that up?
+The provided `setup.sh` installs PyTorch from the CUDA 13.0 wheel index. Override the URL in `setup_config.sh`—for example, to `https://download.pytorch.org/whl/cpu`—if you need a different build.
 
-[1]: https://github.com/yarinbnyamin/Emotion-Detection-on-Virtual-Avatars/?utm_source=chatgpt.com "yarinbnyamin/Emotion-Detection-on-Virtual-Avatars - GitHub"
-[2]: https://github.com/riti1302/Cartoon-Emotion-Recognition?utm_source=chatgpt.com "Tom & Jerry cartoon facial emotion recognition - GitHub"
-[3]: https://github.com/hysts/anime-face-detector?utm_source=chatgpt.com "Anime Face Detector using mmdet and mmpose - GitHub"
-[4]: https://github.com/sb-ai-lab/EmotiEffLib?utm_source=chatgpt.com "sb-ai-lab/EmotiEffLib: Efficient face emotion recognition in ... - GitHub"
+---
+
+## Quick Start
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/<you>/sillytavern-expression-classifier.git
+   cd sillytavern-expression-classifier
+   ```
+
+2. **Create the virtual environment**
+   - POSIX / WSL:
+     ```bash
+     ./setup.sh
+     ```
+   - Windows PowerShell (manual sequence):
+     ```powershell
+     py -3 -m venv .venv
+     .\.venv\Scripts\Activate.ps1
+     pip install --upgrade pip
+     pip install -r requirements.txt
+     ```
+
+3. **Activate the environment whenever you work on the project**
+   - POSIX / WSL: `source .venv/bin/activate`
+   - Windows PowerShell: `.venv\Scripts\Activate.ps1`
+
+4. **Configure classification**
+   - Open `config.yaml` and set `mistral_api_key` (or export `MISTRAL_API_KEY`) for API mode.  
+   - Adjust `emotion_classes` and `confidence_threshold` to match your use case.
+
+5. **Optional: prepare local weights**
+   - Switch `classification_mode` to `"local"` if you want to bypass the API.  
+   - Place your PyTorch checkpoint at `models/emotion_classifier.pth` (or override `model_path`).  
+   - Document the training recipe in `models/README_MODEL.md`.
+
+6. **Prepare input assets**
+   - Copy the images you want to classify into `data/raw`. If you keep multiple character sets, run the classifier on each folder separately.
+
+---
+
+## Configuration Reference
+
+Key entries in `config.yaml`:
+
+- `classification_mode`: `"api"` (default) or `"local"`.  
+- `mistral_api_key`: API key used when `classification_mode` is `api`. You can leave this blank and rely on the `MISTRAL_API_KEY` environment variable.  
+- `mistral_model`: Mistral model name; defaults to `"pixtral-12b-latest"`.  
+- `mistral_endpoint`: Chat completions endpoint; defaults to `https://api.mistral.ai/v1/chat/completions`.  
+- `model_path`: Path to the `.pth` file for local mode.  
+- `input_dir`, `processed_dir`, `output_dir`: Source/processed/output directories.  
+- `emotion_classes`: Ordered label list that aligns with whichever classifier you use.  
+- `confidence_threshold`: Minimum confidence required to accept the predicted label; lower scores are moved to `uncertain`.
+
+All of the path-like values can be overridden at runtime with CLI flags (`--input-dir`, `--processed-dir`, `--output-dir`, `--model-path`, `--config`). Pass `--mode api|local` to override `classification_mode` without editing the file.
+
+---
+
+## Usage
+
+### (Optional) Preprocess sprites
+
+Normalize image size and RGB format before classifying:
+
+```bash
+python scripts/preprocess.py
+```
+
+The script copies every supported file (`.png`, `.jpg`, `.jpeg`, `.webp`) from `data/raw` into `data/processed`, resized to 224×224.
+
+### Batch classification (CLI)
+
+```bash
+python scripts/classify_batch.py
+```
+
+Common overrides:
+
+```bash
+python scripts/classify_batch.py \
+  --config path/to/config.yaml \
+  --mode api \
+  --input-dir path/to/images \
+  --processed-dir path/to/preprocessed \
+  --output-dir path/to/output
+```
+
+- API mode expects a valid key in `mistral_api_key` or the `MISTRAL_API_KEY` environment variable.  
+- Local mode additionally needs `--model-path` (or the `model_path` entry in `config.yaml`).  
+- Outputs include sorted images in `<output>/<label>/`, an `uncertain/` folder for low-confidence cases, and `classification_log.json` with filename, predicted label, assigned label, confidence, classifier mode, and the raw API text (if applicable).
+
+### Streamlit UI
+
+```bash
+streamlit run ui/app.py
+```
+
+Provide the input and output directories, then click **Run Classification**. Remember to set `MISTRAL_API_KEY` (or update `config.yaml`) before launching the UI if you plan to use API mode; the app simply invokes the CLI under the hood.
+
+---
+
+## API Classification Notes
+
+- Pixtral-12B (`pixtral-12b-latest`) is the default because it offers the most consistent fine-grained expression recognition among Mistral's released models.  
+- The prompt enforces a JSON-only reply. If the response drifts from the expected structure, the script falls back to `uncertain` and records the raw text in the log for debugging.  
+- You can change `mistral_model` or `mistral_endpoint` in `config.yaml` to target other Mistral vision-capable endpoints without modifying the code.
+
+---
+
+## Local Mode Notes
+
+- A trained PyTorch checkpoint is not included. Supply your own weights at `models/emotion_classifier.pth` and ensure the classifier head order matches `emotion_classes`.  
+- The preprocessing assumes 224×224 RGB inputs normalized like ImageNet. If your model expects different transforms, update `scripts/utils.py` and the transform pipeline inside `scripts/classify_batch.py`.  
+- For GPU inference, modify `run_local_classification` to move the model and tensors to CUDA.
+
+---
+
+## Troubleshooting
+
+- **Missing API key** - set `mistral_api_key` in `config.yaml` or export `MISTRAL_API_KEY`.  
+- **HTTP errors** - check network connectivity and your Mistral quota; failed requests are logged and the image is marked `uncertain`.  
+- **Unsupported image format** - convert files outside of `.png`, `.jpg`, `.jpeg`, or `.webp`.  
+- **Too many uncertain results** - lower `confidence_threshold`, adjust the prompt, or fine-tune a dedicated local model.  
+- **Local mode model mismatch** - confirm the checkpoint's classifier head matches the number and order of labels in `emotion_classes`.
+
+Happy sorting!
