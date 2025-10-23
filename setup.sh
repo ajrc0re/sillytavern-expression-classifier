@@ -5,7 +5,7 @@ set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_PATH="${PROJECT_ROOT}/.venv"
-PYTHON_BIN="${PYTHON:-python3}"
+PYTHON_BIN="${PYTHON:-}"
 SETUP_CONFIG_FILE="${PROJECT_ROOT}/setup_config.sh"
 DEFAULT_PYTORCH_INDEX_URL="https://download.pytorch.org/whl/cu130"
 PYTORCH_INDEX_URL="${DEFAULT_PYTORCH_INDEX_URL}"
@@ -18,10 +18,21 @@ fi
 
 PYTORCH_INDEX_URL="${PYTORCH_INDEX_URL:-${DEFAULT_PYTORCH_INDEX_URL}}"
 
-# Ensure the requested Python interpreter is available before continuing.
-if ! command -v "${PYTHON_BIN}" >/dev/null 2>&1; then
-  echo "error: ${PYTHON_BIN} is not installed or not on PATH" >&2
-  exit 1
+# Resolve an available Python interpreter (prefer env override -> python3 -> python).
+if [ -n "${PYTHON_BIN}" ]; then
+  if ! command -v "${PYTHON_BIN}" >/dev/null 2>&1; then
+    echo "error: Requested python interpreter '${PYTHON_BIN}' is not on PATH" >&2
+    exit 1
+  fi
+else
+  if command -v python3 >/dev/null 2>&1; then
+    PYTHON_BIN="python3"
+  elif command -v python >/dev/null 2>&1; then
+    PYTHON_BIN="python"
+  else
+    echo "error: Unable to locate a python interpreter (tried python3, python)" >&2
+    exit 1
+  fi
 fi
 
 # Create a project-local virtual environment on the first run.
@@ -32,7 +43,15 @@ fi
 
 # shellcheck disable=SC1090
 # Activate the environment so subsequent installs stay self-contained.
-source "${VENV_PATH}/bin/activate"
+if [ -f "${VENV_PATH}/bin/activate" ]; then
+  source "${VENV_PATH}/bin/activate"
+elif [ -f "${VENV_PATH}/Scripts/activate" ]; then
+  # Windows virtualenv layout.
+  source "${VENV_PATH}/Scripts/activate"
+else
+  echo "error: Unable to locate virtual environment activation script in ${VENV_PATH}" >&2
+  exit 1
+fi
 
 # Refresh packaging tools to avoid installer edge cases.
 python -m pip install --upgrade pip setuptools wheel
