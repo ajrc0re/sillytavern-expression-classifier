@@ -1,0 +1,64 @@
+# Supported options: "mistral", "openai", "google", "grok", or "local"
+classification_mode: "mistral"
+mistral_api_key: ""
+mistral_model: "pixtral-12b-latest"
+mistral_endpoint: "https://api.mistral.ai/v1/chat/completions"
+openai_api_key: ""
+openai_model: "gpt-4o-mini"
+openai_endpoint: "https://api.openai.com/v1/chat/completions"
+google_api_key: ""
+google_model: "gemini-2.5-pro"
+google_endpoint: "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+xai_api_key: ""
+xai_model: "grok-4-fast-reasoning"
+xai_endpoint: "https://api.x.ai/v1/chat/completions"
+model_path: "models/emotion_classifier.pth"
+input_dir: "data/raw"
+processed_dir: "data/processed"
+output_dir: "data/sorted"
+emotion_classes:
+- Admiration
+- Amusement
+- Anger
+- Annoyance
+- Approval
+- Caring
+- Confusion
+- Curiosity
+- Desire
+- Disappointment
+- Disapproval
+- Disgust
+- Embarrassment
+- Excitement
+- Fear
+- Gratitude
+- Grief
+- Joy
+- Love
+- Nervousness
+- Neutral
+- Optimism
+- Pride
+- Realization
+- Relief
+- Remorse
+- Sadness
+- Surprise
+api_prompt_template: >
+  Analyze the attached anime-style character image and classify the facial expression based only on facial cues:
+  eyes, eyebrows, mouth shape, blush, and symbolic effects typical of anime (e.g., anger vein, tear drop, sweat mark, face fault).
+  Ignore pose, outfit, background, lighting, or any non-facial factors.
+  The presence of blushing distinguishes surprise from fear and love from joy.
+  Select exactly one label that best describes the image's expression from this list: {labels}.
+  Respond with a valid JSON object only, no additional text:
+  {"label": "<label>", "confidence": <float between 0.0 and 1.0>}.
+
+bias_prompt_template: >
+  Current counts: {counts_json}.
+  Prefer underrepresented labels when confidence is similar.
+  Apply a proportional weighting curve: decrease confidence for common labels, increase it for rare ones.
+  If two labels seem equally valid, slightly prefer the one used less often.
+  Do not let bias override clear visual evidence.
+
+confidence_threshold: 0.5
