@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import shutil
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -130,12 +131,14 @@ def create_zip_archive(source_dir: Path, zip_name: str) -> Path:
 
     archive_base = output_dir / zip_name
     archive_path = archive_base.with_suffix(".zip")
-    shutil.make_archive(
-        str(archive_base),
-        "zip",
-        root_dir=source_dir.parent,
-        base_dir=source_dir.name,
-    )
+    if archive_path.exists():
+        archive_path.unlink()
+    with zipfile.ZipFile(
+        archive_path, "w", compression=zipfile.ZIP_DEFLATED
+    ) as zf:
+        for file_path in sorted(source_dir.iterdir()):
+            if file_path.is_file():
+                zf.write(file_path, arcname=file_path.name)
     return archive_path
 
 

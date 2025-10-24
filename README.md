@@ -176,7 +176,7 @@ The helper will:
 
 - rename files inside each label directory to `Label.###` (with de-duplication if needed),
 - copy the renamed files into a new timestamped directory under `data/finished/`,
-- prompt for a zip name and create `<name>.zip` inside `output_zips/`, and
+- prompt for a zip name and create `<name>.zip` inside `output_zips/` with the renamed images placed at the top level (no nested folder), and
 - offer to delete the remaining contents of `data/sorted/` (with a reminder that the finished copy is preserved).
 
 Use `--output-dir` if you classified into a non-default location, e.g. `python scripts/postprocess_sorted.py --output-dir path/to/output`.
