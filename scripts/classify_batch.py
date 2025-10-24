@@ -233,11 +233,12 @@ def call_xai_classifier(
             {
                 "role": "user",
                 "content": [
-                    {"type": "input_text", "text": prompt_text},
+                    {"type": "text", "text": prompt_text},
                     {
-                        "type": "input_image",
-                        "image_base64": encode_image_base64(image_path),
-                        "mime_type": detect_mime_type(image_path),
+                        "type": "image_url",
+                        "image_url": {
+                            "url": image_to_data_url(image_path),
+                        },
                     },
                 ],
             }
@@ -735,7 +736,11 @@ def main() -> None:
         "entries": log_entries,
     }
 
-    log_path = output_dir / "classification_log.json"
+    log_dir = output_dir.parent.parent / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    safe_timestamp = run_datetime.isoformat().replace(":", "-")
+    log_name = f"classification_log_{safe_timestamp}.json"
+    log_path = log_dir / log_name
     with log_path.open("w", encoding="utf-8") as fh:
         json.dump(log_payload, fh, indent=2)
 

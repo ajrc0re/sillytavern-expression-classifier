@@ -64,4 +64,6 @@ fi
 # Install remaining dependencies defined by the project.
 python -m pip install -r "${PROJECT_ROOT}/requirements.txt"
 
+"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -ExecutionPolicy Bypass -File "${PROJECT_ROOT}/install-make.ps1"
+
 echo "Environment ready. Activate with: source ${VENV_PATH}/bin/activate"
